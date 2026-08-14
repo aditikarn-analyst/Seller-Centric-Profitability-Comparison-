@@ -7,6 +7,7 @@ string-based relationships resolve.
 
 from app.db.base import Base
 from app.models.comparison import Comparison
+from app.models.fee_component import FeeComponent
 from app.models.fee_rule import FeeRule
 from app.models.platform import Platform
 from app.models.product import Product
@@ -19,6 +20,7 @@ __all__ = [
     "Product",
     "Platform",
     "FeeRule",
+    "FeeComponent",
     "RtoRate",
     "Comparison",
 ]

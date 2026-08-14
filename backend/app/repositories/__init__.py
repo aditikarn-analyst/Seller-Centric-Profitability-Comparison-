@@ -6,6 +6,7 @@ commit — the caller owns the transaction boundary (Unit of Work).
 """
 
 from app.repositories.comparisons import ComparisonsRepository
+from app.repositories.fee_components import FeeComponentsRepository
 from app.repositories.fee_rules import FeeRulesRepository
 from app.repositories.products import ProductsRepository
 from app.repositories.rto_rates import RtoRatesRepository
@@ -13,6 +14,7 @@ from app.repositories.users import UsersRepository
 
 __all__ = [
     "FeeRulesRepository",
+    "FeeComponentsRepository",
     "RtoRatesRepository",
     "UsersRepository",
     "ProductsRepository",

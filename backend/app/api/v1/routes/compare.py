@@ -23,6 +23,8 @@ from app.schemas.serializers import (
     serialize_recommendation,
     serialize_stored_comparison,
 )
+from app.schemas.research_serializers import serialize_research_outcome
+from app.services.component_engine import ComponentComparisonEngine
 from app.services.fee_engine import ComparisonEngine, ProductInput
 from app.services.recommendation_engine import recommend
 
@@ -104,6 +106,49 @@ def compare(
         "weight_g": payload.weight_g,
     }
     return serialize_comparison_response(product_view, rec)
+
+
+@router.post("/compare/research")
+def compare_research(
+    payload: CompareRequest,
+    user: Optional[User] = Depends(get_optional_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Research comparison — authoritative source is the normalized fee_components
+    table (source-verified). The legacy fee_rules engine is never used here.
+
+    Returns per-marketplace status (COMPLETE/PARTIAL/UNAVAILABLE), profit bounds,
+    full per-component provenance, assumptions, limitations, and sources.
+    Stateless (not persisted): results are ranges/partial and are not stored in
+    the legacy comparisons table.
+    """
+    outcome = ComponentComparisonEngine(db).compare(
+        ProductInput(
+            category=payload.category,
+            cost_price=payload.cost_price,
+            selling_price=payload.selling_price,
+            weight_g=payload.weight_g,
+        ),
+        fulfillment_type=payload.fulfillment_type,
+        on_date=date.today(),
+    )
+    if not outcome.results:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "No source-verified fee data for this category. Supported categories "
+                "are the 9 internal categories (see GET /product-categories is planned)."
+            ),
+        )
+    product_view = {
+        "name": payload.name,
+        "category": payload.category,
+        "cost_price": str(payload.cost_price),
+        "selling_price": str(payload.selling_price),
+        "weight_g": payload.weight_g,
+        "fulfillment_type": payload.fulfillment_type,
+    }
+    return serialize_research_outcome(product_view, outcome)
 
 
 @router.get("/comparisons")

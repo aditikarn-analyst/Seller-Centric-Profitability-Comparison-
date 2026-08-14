@@ -111,10 +111,12 @@ class TestCompare:
 
     def test_authenticated_compare_persists_history(self, client):
         headers = _auth_headers(client)
-        client.post("/api/v1/compare", json=COMPARE_BODY, headers=headers)
+        resp = client.post("/api/v1/compare", json=COMPARE_BODY, headers=headers).json()
+        n_platforms = len(resp["results"])
         history = client.get("/api/v1/comparisons", headers=headers).json()
-        assert len(history) == 2  # one row per platform
-        assert {h["effective_profit"] for h in history} == {"230.07", "264.59"}
+        assert len(history) == n_platforms  # one row per participating platform
+        profits = {h["effective_profit"] for h in history}
+        assert {"230.07", "264.59"}.issubset(profits)  # Amazon + Flipkart preserved
 
     def test_unknown_category_422(self, client):
         body = {**COMPARE_BODY, "category": "Nonexistent"}
@@ -138,10 +140,12 @@ class TestProductsAndFeeRules:
         assert client.get("/api/v1/products").status_code == 401
 
     def test_fee_rules_listing(self, client):
+        from app.db.seed import data
+
         headers = _auth_headers(client)
         rules = client.get("/api/v1/fee-rules", headers=headers).json()
-        # 18 active rows (historical Amazon H&K row is closed, excluded).
-        assert len(rules) == 18
+        active = [r for r in data.FEE_RULES if r["effective_to"] is None]
+        assert len(rules) == len(active)
         assert all(r["effective_to"] is None for r in rules)
 
 
@@ -177,3 +181,37 @@ class TestBulkCompare:
         files = {"file": ("bad.csv", bad, "text/csv")}
         r = client.post("/api/v1/compare/bulk", files=files, headers=headers)
         assert r.status_code == 422
+
+
+class TestResearchCompare:
+    BODY = {"category": "Home & Kitchen", "cost_price": "450.00",
+            "selling_price": "999.00", "weight_g": 400}
+
+    def test_returns_provenance_and_dataset_version(self, client):
+        r = client.post("/api/v1/compare/research", json=self.BODY)
+        assert r.status_code == 200
+        body = r.json()
+        assert body["dataset_version"] == "2026.08"
+        assert "does not represent a live" in body["disclaimer"]
+        meesho = next(x for x in body["results"] if x["marketplace"] == "Meesho")
+        assert meesho["status"] == "PARTIAL"
+        assert meesho["net_profit_min"] == "372.00"
+        assert meesho["net_profit_max"] == "487.64"
+        assert meesho["sources"]                      # provenance surfaced
+        assert meesho["fee_breakdown"][0]["verification_status"]
+
+    def test_partial_marketplaces_visible_with_limitations(self, client):
+        body = client.post("/api/v1/compare/research", json=self.BODY).json()
+        amazon = next(x for x in body["results"] if x["marketplace"] == "Amazon")
+        assert amazon["ranking_eligible"] is False
+        assert "PAYMENT" in amazon["unavailable_components"]
+        assert any("PAYMENT" in lim for lim in amazon["limitations"])
+        assert body["definitive_winner"] == "Meesho"
+
+    def test_unsupported_category_422(self, client):
+        bad = {**self.BODY, "category": "Nonexistent"}
+        assert client.post("/api/v1/compare/research", json=bad).status_code == 422
+
+    def test_negative_weight_422(self, client):
+        bad = {**self.BODY, "weight_g": -5}
+        assert client.post("/api/v1/compare/research", json=bad).status_code == 422

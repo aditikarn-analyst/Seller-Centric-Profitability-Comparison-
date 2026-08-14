@@ -839,3 +839,88 @@ that addresses RG8.
 §16 Folder Structure · §17 Installation · §18 Testing Strategy · §19 Security and Ethics ·
 §20 Limitations · §21 Future Scope · §22 Git Workflow · §23 Roadmap ·
 §24 Research Perspective and Publication Venues · §25 References · §26 License and Citation*
+
+---
+
+## Marketplace Fee Data Methodology
+
+> **Data statement.** Marketplace fees are subject to change. This system uses **manually
+> source-verified fee data** and **does not represent a live marketplace fee feed**. Users
+> should verify current marketplace seller fee schedules before making commercial decisions.
+
+### Data source & provenance
+Marketplace fees are **not available via any public API**. There is no live integration and
+no scraping. Fee values are **manually collected from official seller/supplier pages** (and,
+where official values are not public, from clearly-labelled secondary sources) and stored in a
+normalized `fee_components` table. Every value carries its **own** source, source type
+(`OFFICIAL` / `SECONDARY` / `USER_ASSUMPTION` / `ILLUSTRATIVE`), verification status
+(`VERIFIED` / `PARTIALLY_VERIFIED` / `NOT_PUBLICLY_VERIFIABLE` / `ASSUMED`), and
+`last_verified` date. Full provenance is in [`DATA_SOURCES.md`](DATA_SOURCES.md).
+
+### Why component-level provenance
+A single marketplace rule mixes fees of very different confidence — e.g. Amazon's commission
+is officially published (`VERIFIED`) while its shipping is a range (`PARTIALLY_VERIFIED`) and
+its payment fee is undisclosed (`NOT_PUBLICLY_VERIFIABLE`). Assigning one status to the whole
+rule would misrepresent the data. The normalized `fee_components` model records **each fee
+component independently**, so provenance is never averaged away.
+
+### Fee representation (no fabricated precision)
+- `PERCENT` / `EXACT` — an exact published value (incl. a genuine **0%**).
+- `RANGE` — a published band (e.g. Meesho logistics ₹27–120) stored as `value_min`/`value_max`,
+  **never** collapsed to a midpoint. Open-ended ranges ("starts at ₹1") store `value_max = NULL`.
+- `NOT_VERIFIABLE` — the fee exists but its value is undisclosed; **no number is invented**.
+  This is explicitly distinct from a known 0.
+
+### Calculation methodology
+For each marketplace the engine assembles the applicable components (by category, price band,
+fulfilment, date), computes a **fee-base range**, adds statutory 18% GST, and derives:
+`net profit = selling − cost − marketplace fees − GST`. Where fees are ranges, it reports a
+**profit min/max**, not a single number. Each result is labelled `COMPLETE`, `PARTIAL`, or
+`UNAVAILABLE`.
+
+### Ranking policy (honest by construction)
+A marketplace participates in the **definitive winner** ranking only when its cost is fully
+upper-bounded and free of `NOT_PUBLICLY_VERIFIABLE` material fees. Marketplaces with missing
+material fees are **still shown**, with their partial figures and the **exact missing
+component named** — never silently dropped, never fabricated.
+
+### Assumptions & limitations
+- **GST** is a statutory calculation (18% of the fee base), documented as such, not a
+  marketplace-specific fee.
+- **RTO** is a modelling assumption, excluded by default and never presented as an official fee.
+- With current public data, some marketplaces are frequently `PARTIAL`/excluded because exact
+  per-category commission (≥ ₹1000) or shipping is not publicly disclosed. This is reported
+  transparently — *"insufficient publicly verified data"* is a valid, preferred result over a
+  fabricated number.
+
+### Reproducibility
+The dataset is versioned (`FEE_DATASET_VERSION = 2026.08`, collected/verified 2026-08-09).
+Calculations are deterministic (exact `Decimal`), every component is traceable to a source, and
+the legacy illustrative `fee_rules` data is retained only for reference — **never** used for a
+research result (a test asserts the component engine is unchanged when `fee_rules` is deleted).
+
+### Worked example (source-verified, `POST /api/v1/compare/research`)
+**Input:** Home & Kitchen · cost ₹450 · selling ₹999 · 400 g · fulfilment: Any.
+
+| Marketplace | Status | Fees (₹) | Net profit (₹) | Why |
+|---|---|---|---|---|
+| **Meesho** | PARTIAL (definitive) | 61.36 – 177.00 | **372.00 – 487.64** | commission 0% (VERIFIED), payment 0% (VERIFIED); fixed ₹25–30 & shipping ₹27–120 are bounded ranges → bounded profit **range** |
+| Amazon | UNAVAILABLE | — | best case only | commission 0% ≤₹1000 (VERIFIED) but **payment fee NOT_PUBLICLY_VERIFIABLE** and shipping open-ended → cannot bound worst case → **excluded from definitive ranking** |
+| Flipkart | PARTIAL | — | best case only | commission 0% <₹1000 (PARTIALLY_VERIFIED) but **shipping upper bound open** → cannot bound worst case → excluded |
+
+**Recommendation:** *"Recommended based on available verified fee data: Meesho is the only
+marketplace with sufficient verified data for a definitive result for these inputs; others are
+partial."* — a definitive winner is produced **only** because Meesho is the sole marketplace
+whose cost is fully verifiable/bounded. This is a data-availability result, transparently
+reported, **not** a claim that Meesho is universally most profitable.
+
+### Missing-data handling
+The engine distinguishes **explicit 0** (e.g. Meesho 0% commission) from **NOT_PUBLICLY_VERIFIABLE**
+(e.g. Flipkart ≥₹1000 commission) from a **missing component row** (no data → treated as missing,
+never ₹0). A missing or unverifiable *material* fee makes the result `UNAVAILABLE`/`PARTIAL` and
+excludes the marketplace from the definitive ranking — it is never silently assumed to be zero.
+
+### Future scope
+Authenticated Seller Central / Seller Hub access to convert `NOT_VERIFIABLE` → `VERIFIED`;
+weight/zone-aware shipping to bound Amazon/Flipkart; per-subcategory Amazon commissions; and a
+scheduled re-verification workflow that bumps `FEE_DATASET_VERSION` each cycle.

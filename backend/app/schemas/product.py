@@ -20,6 +20,8 @@ class CompareRequest(BaseModel):
     length_cm: Optional[Decimal] = Field(default=None, gt=0)
     width_cm: Optional[Decimal] = Field(default=None, gt=0)
     height_cm: Optional[Decimal] = Field(default=None, gt=0)
+    # Advanced input (optional): "SELF_SHIP" | "PLATFORM_FULFILLED". None = any.
+    fulfillment_type: Optional[str] = Field(default=None, max_length=30)
 
 
 class ProductCreate(CompareRequest):

@@ -61,9 +61,17 @@ class TestInterchangeability:
         assert get_fee_module("Flipkart").name == "Flipkart"
         assert registered_platforms() == ["Amazon", "Flipkart"]
 
-    def test_unregistered_platform_raises(self):
-        with pytest.raises(KeyError):
-            get_fee_module("Meesho")
+    def test_unregistered_platform_uses_default_module(self):
+        # Any platform without a specialised module is priced by the default
+        # module (no code needed to add a platform).
+        from app.services.platforms import DefaultFeeModule, has_specific_module
+
+        assert not has_specific_module("Meesho")
+        module = get_fee_module("Meesho")
+        assert isinstance(module, DefaultFeeModule)
+        # It still prices correctly from a rule.
+        fb = module.compute(Decimal("999.00"), 400, AMAZON_RULE)
+        assert fb.fee_base == Decimal("244.86")
 
 
 class TestWithSeededRule:

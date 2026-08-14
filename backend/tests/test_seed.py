@@ -15,12 +15,15 @@ def _amazon(session) -> Platform:
 
 
 class TestSeedPopulation:
-    def test_counts(self, db_session):
+    def test_counts_match_config(self, db_session):
+        # Counts are derived from the platform config, not hardcoded, so adding
+        # a platform updates the expectation automatically.
+        from app.db.seed import data
+
         seed_all(db_session)
-        assert db_session.query(Platform).count() == 2
-        # 9 categories x 2 platforms = 18, + 1 historical Amazon H&K row = 19
-        assert db_session.query(FeeRule).count() == 19
-        assert db_session.query(RtoRate).count() == 18
+        assert db_session.query(Platform).count() == len(data.PLATFORM_SPECS)
+        assert db_session.query(FeeRule).count() == len(data.FEE_RULES)
+        assert db_session.query(RtoRate).count() == len(data.RTO_RATES)
 
     def test_at_least_nine_categories(self, db_session):
         """Objective O1: >= 9 product categories modelled."""

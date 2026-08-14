@@ -10,6 +10,7 @@ Run locally from the ``backend/`` directory::
 """
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
 from app.core.config import settings
@@ -24,6 +25,17 @@ def create_app() -> FastAPI:
             "Seller-centric multi-platform e-commerce profitability "
             "comparison system."
         ),
+    )
+
+    # Allow the frontend dev origin(s) to call the API from the browser.
+    # Token is sent in the Authorization header (not a cookie), so credentials
+    # are not required. Origins are configurable via CORS_ORIGINS.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins_list,
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
 
     @app.get("/health", tags=["system"])

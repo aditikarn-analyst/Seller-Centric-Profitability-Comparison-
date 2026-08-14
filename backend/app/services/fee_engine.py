@@ -138,8 +138,14 @@ class ComparisonEngine:
         self, product: ProductInput, on_date: Optional[date] = None
     ) -> list[PlatformResult]:
         on_date = on_date or date.today()
+        # Business rule: only active platforms that onboard third-party sellers
+        # participate. Brand-owned D2C stores are excluded here even if they
+        # somehow carried fee rows.
         active_platforms = self.session.scalars(
-            select(Platform).where(Platform.is_active.is_(True))
+            select(Platform).where(
+                Platform.is_active.is_(True),
+                Platform.seller_supported.is_(True),
+            )
         )
 
         results: list[PlatformResult] = []
