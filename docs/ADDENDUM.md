@@ -50,7 +50,7 @@ final-year/
 │   ├── requirements.txt
 │   ├── .env.example
 │   └── pytest.ini
-├── frontend/                       # Vite + React 18 (Phase 10)
+├── front_end/                      # Current TanStack Start / Lovable frontend (React 19, Vite)
 ├── docs/ADDENDUM.md                # this document
 ├── .gitignore
 └── README updated.md               # §1–§13, the source of truth
